@@ -148,6 +148,19 @@ namespace typoi {
       stream.close();
       change = true;
     }
+    void load(string path) {
+      ifstream stream(path);
+      if (!stream.is_open())
+        return;
+      char ch;
+      while (stream.get(ch)) {
+        after.push(ch);
+        n_items++;
+      }
+      assert(stream.eof());
+      stream.close();
+      change = true;
+    }
     void insert(char ch, int offset) {
       if (offset < 0 || offset > n_items)
         throw invalid_argument("invalid offset");
@@ -192,10 +205,17 @@ namespace typoi {
     void write(string path) {
       ofstream file(path);
       assert(file.is_open());
-      for (int i = 0; i < after.n_items; i++)
-        file << after[i];
-      for (int i = before.n_items - 1; i >= 0; i--)
-        file << before[i];
+      char last{};
+      for (int i = 0; i < after.n_items; i++) {
+        last = after[i];
+        file << last;
+      }
+      for (int i = before.n_items - 1; i >= 0; i--) {
+        last = before[i];
+        file << last;
+      }
+      if (last != '\n')
+        file << '\n';
       assert(file.good());
       file.close();
     }
@@ -270,7 +290,11 @@ namespace typoi {
   };
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+  if (argc == 1) {
+    cerr << "usage: editor [file]" << endl;
+    return 1;
+  }
 
   initscr();
   noecho();
@@ -278,11 +302,16 @@ int main() {
   keypad(stdscr, true);
   start_color();
 
+  init_color(COLOR_BLUE, 200, 500, 1000);
+  init_color(COLOR_YELLOW, 1000, 1000, 0);
+  init_color(COLOR_GREEN, 0, 1000, 0);
+  init_color(COLOR_RED, 1000, 0, 0);
+
   init_pair(1, COLOR_YELLOW, COLOR_BLACK); // numbers
   init_pair(2, COLOR_RED, COLOR_BLACK); // delims
   init_pair(3, COLOR_WHITE, COLOR_BLACK); // other
   init_pair(4, COLOR_GREEN, COLOR_BLACK); // keyword
-  init_pair(5, COLOR_MAGENTA, COLOR_BLACK); // keyword
+  init_pair(5, COLOR_BLUE, COLOR_BLACK); // preprocessor
 
   int rows{};
   int cols{};
@@ -298,8 +327,12 @@ int main() {
 
   int prev_ldx{};
   int prev_sdx{};
+  bool save_it{};
 
-  typoi::gap_buffer text("out.cpp");
+  typoi::gap_buffer text;
+
+  if (argc > 1)
+    text.load(argv[1]);
 
   typoi::line_set lines;
   lines.update(text);
@@ -430,9 +463,10 @@ int main() {
       wmove(win, 1, 1);
       wprintw(win, "save it");
       wrefresh(win);
-      text.write("out.cpp");
+      text.write(argv[1]);
       this_thread::sleep_for(chrono::milliseconds(500));
       curs_set(1);
+      save_it = true;
     }
       break;
     case KEY_HOME:
@@ -472,7 +506,7 @@ int main() {
     case KEY_RIGHT:
       if (lines.n_lines == 0)
         break;
-      if (cx < cols - 1 and cx < lines.get_line_len(cy + ldx))
+      if (cx < cols - 1 and cx < lines.get_line_len(cy + ldx) and text[lines.get_line_start(cy + ldx) + sdx + cx] != '\n')
         cx++;
       else if (cx == cols - 1 and lines.get_line_len(cy + ldx) > sdx + cols)
         sdx++;
@@ -525,7 +559,6 @@ int main() {
       break;
     case 127:
       if (text.n_items > 0 and (cy > 0 || cx > 0)) {
-//        char ech = text[lines.get_line_start(cy + ldx) + sdx + cx];
         text.erase_prev(lines.get_line_start(cy + ldx) + sdx + cx);
         if (cx > 0)
           cx--;
@@ -558,7 +591,8 @@ int main() {
         }
       }
     }
-    if (text.changed() || ldx != prev_ldx || sdx != prev_sdx) {
+    if (text.changed() || ldx != prev_ldx || sdx != prev_sdx || save_it) {
+      save_it = false;
       lines.update(text);
       highlight.reserve(text.n_items);
       int i = 0;
@@ -580,7 +614,7 @@ int main() {
             while (beg < i)
               highlight[beg++] = 3;
           }
-        } else if (i < text.n_items and strchr("+-*/^%!()[]{}<>&=", text[i]))
+        } else if (i < text.n_items and strchr("+-*/^%!()[]{}<>&=|", text[i]))
           highlight[i++] = 2;
         else if (i < text.n_items)
           highlight[i++] = 3;
@@ -614,8 +648,6 @@ int main() {
   } while ((ch = getch()) != 17);
 
   endwin();
-
-  text.write("out.cpp");
 
   return 0;
 }
