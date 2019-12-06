@@ -6,107 +6,9 @@ using namespace std;
 #define printd(expr) std::cout << #expr " = " << (expr) << std::endl
 #define locale static
 
-using ubyte = unsigned char;
-
-namespace colors {
-  struct rgb_format {
-    ubyte red{};
-    ubyte green{};
-    ubyte blue{};
-  };
-}
-
-struct vec2i {
-  int x{};
-  int y{};
-};
+locale const int tab_width = 2;
 
 namespace typoi {
-  template <int width, int height>
-  class ppm_image {
-  private:
-    vector<vector<colors::rgb_format>> pixels{height, vector<colors::rgb_format>(width)};
-  public:
-   ppm_image() = default;
-   void set_pixel(int xpos, int ypos, colors::rgb_format color) {
-     assert(xpos >= 0 and xpos < width);
-     assert(ypos >= 0 and ypos < height);
-     pixels[ypos][xpos] = color;
-   }
-   void flush(const string &path) {
-     stringstream stream;
-     stream << "P3" << endl;
-     stream << width << " " << height << endl;
-     stream << "255" << endl;
-     for (int i = 0; i < height; i++) {
-       for (int j = 0; j < width; j++) {
-         stream << uint(pixels[i][j].red)   << " ";
-         stream << uint(pixels[i][j].green) << " ";
-         stream << uint(pixels[i][j].blue)  << endl;
-       }
-     }
-     ofstream fout(path);
-     assert(fout.is_open());
-     fout << stream.str();
-     assert(fout.good());
-     fout.close();
-   }
-   void backround(const colors::rgb_format &color) {
-     for (int i = 0; i < height; i++) {
-       for (int j = 0; j < width; j++) {
-         pixels[i][j] = color;
-       }
-     }
-   }
-   void line(vec2i a, vec2i b, const colors::rgb_format &color) {
-     bool is_swap = false;
-     if (abs(a.x - b.x) < abs(a.y - b.y)) {
-       swap(a.x, a.y);
-       swap(b.x, b.y);
-       is_swap = true;
-     }
-     if (a.x > b.x)
-       swap(a, b);
-    int delta_x = abs(a.x - b.x);
-    int delta_y = abs(a.y - b.y);
-    int error = 0;
-    int delta_err = delta_y;
-    int y = a.y;
-    int diry = b.y - a.y;
-    if (diry > 0)
-      diry = 1;
-    if (diry < 0)
-      diry = -1;
-    for (int x = a.x; x <= b.x; x++) {
-      if (is_swap) {
-        this->set_pixel(y, x, color);
-      } else
-        this->set_pixel(x, y, color);
-      error += delta_err;
-      if ((error << 1) >= delta_x) {
-        y += diry;
-        error -= delta_x;
-      }
-    }
-   }
-   void rectangle(vec2i a, vec2i b, vec2i c, vec2i d, const colors::rgb_format &color) {
-     this->line(a, b, color);
-     this->line(b, c, color);
-     this->line(c, d, color);
-     this->line(d, a, color);
-   }
-   void flip_vertical() {
-     reverse(pixels.begin(), pixels.end());
-   }
-   void flip_horizontal() {
-     for (auto &i : pixels)
-       reverse(i.begin(), i.end());
-   }
-  private:
-   ppm_image(const ppm_image &) = delete;
-   void operator=(const ppm_image &) = delete;
-  };
-
   struct stack {
     vector<char> items{};
     int n_items{};
@@ -141,8 +43,15 @@ namespace typoi {
       assert(stream.is_open());
       char ch;
       while (stream.get(ch)) {
-        after.push(ch);
-        n_items++;
+        if (ch == '\t') {
+          for (int i = 0; i < tab_width; i++) {
+            after.push(' ');
+            n_items++;
+          }
+        } else {
+          after.push(ch);
+          n_items++;
+        }
       }
       assert(stream.eof());
       stream.close();
@@ -154,8 +63,15 @@ namespace typoi {
         return;
       char ch;
       while (stream.get(ch)) {
-        after.push(ch);
-        n_items++;
+        if (ch == '\t') {
+          for (int i = 0; i < tab_width; i++) {
+            after.push(' ');
+            n_items++;
+          }
+        } else {
+          after.push(ch);
+          n_items++;
+        }
       }
       assert(stream.eof());
       stream.close();
@@ -287,15 +203,22 @@ namespace typoi {
       }
       return lines_info[n].start;
     }
+    int get_line_end(int n) {
+      if (n_lines == 0)
+        return 0;
+      return lines_info[n].end;
+    }
   };
 }
 
+#define ctrl_key(code) ((code) & 0x1F)
+
 int main(int argc, char *argv[]) {
   if (argc == 1) {
-    cerr << "usage: editor [file]" << endl;
+    cerr << "usage: bad [file]" << endl;
     return 1;
   }
-
+  setlocale(LC_ALL, "Russian");
   initscr();
   noecho();
   raw();
@@ -306,11 +229,12 @@ int main(int argc, char *argv[]) {
   init_color(COLOR_YELLOW, 1000, 1000, 0);
   init_color(COLOR_GREEN, 0, 1000, 0);
   init_color(COLOR_RED, 1000, 0, 0);
+  init_color(COLOR_MAGENTA, 300, 300, 300);
 
-  init_pair(1, COLOR_YELLOW, COLOR_BLACK); // numbers
-  init_pair(2, COLOR_RED, COLOR_BLACK); // delims
+  init_pair(1, COLOR_BLUE, COLOR_BLACK); // numbers
+  init_pair(2, COLOR_MAGENTA, COLOR_BLACK); // delims
   init_pair(3, COLOR_WHITE, COLOR_BLACK); // other
-  init_pair(4, COLOR_GREEN, COLOR_BLACK); // keyword
+  init_pair(4, COLOR_YELLOW, COLOR_BLACK); // keyword
   init_pair(5, COLOR_BLUE, COLOR_BLACK); // preprocessor
 
   int rows{};
@@ -437,6 +361,16 @@ int main(int argc, char *argv[]) {
     {"xor", true},
     {"xor_eq", true},
     {"override", true},
+    {"elif", true},
+    {"func", true},
+    {"method", true},
+    {"none", true},
+    {"null", true},
+    {"cmake_minimum_required", true},
+    {"project", true},
+    {"add_executable", true},
+    {"target_link_libraries", true},
+    {"band", true}
   };
 
   const unordered_map<string, bool> preprocess_key_word {
@@ -456,19 +390,29 @@ int main(int argc, char *argv[]) {
 
   do {
     switch (ch) {
-    case 19: {
+    case ctrl_key('s'): {
       curs_set(0);
-      auto win = newwin(3, 9, (rows - 3) / 2, (cols - 9) / 2);
+      int n = strlen(argv[1]);
+      auto win = newwin(3, n + 2, (rows - 3) / 2, (cols - n - 2) / 2);
       box(win, 0, 0);
       wmove(win, 1, 1);
-      wprintw(win, "save it");
+      wprintw(win, "%s", argv[1]);
       wrefresh(win);
       text.write(argv[1]);
       this_thread::sleep_for(chrono::milliseconds(500));
       curs_set(1);
       save_it = true;
     }
-      break;
+    break;
+    case ctrl_key('k'): {
+      if (text.n_items > 0) {
+        for (int i = lines.get_line_end(cy + ldx) + 1; i > lines.get_line_start(cy + ldx); i--)
+          text.erase_prev(i);
+        cx = 0;
+        sdx = 0;
+      }
+    }
+    break;
     case KEY_HOME:
       cx = 0;
       sdx = 0;
@@ -557,8 +501,8 @@ int main(int argc, char *argv[]) {
       }
     }
       break;
-    case 127:
-      if (text.n_items > 0 and (cy > 0 || cx > 0)) {
+    case KEY_BACKSPACE:
+      if (text.n_items > 0 and lines.get_line_start(cy + ldx) + sdx + cx > 0) {
         text.erase_prev(lines.get_line_start(cy + ldx) + sdx + cx);
         if (cx > 0)
           cx--;
@@ -573,6 +517,17 @@ int main(int argc, char *argv[]) {
           cx = lines.get_line_len(cy + ldx) - 1;
         }
       }
+      break;
+    case '\t':
+    {
+      for (int i = 0; i < tab_width; i++) {
+        text.insert(' ', lines.get_line_start(cy + ldx) + sdx + cx);
+        if (cx < cols - 1)
+          cx++;
+        else
+          sdx++;
+      }
+    }
       break;
     default:
       if (isprint(ch) || isspace(ch)) {
@@ -597,8 +552,49 @@ int main(int argc, char *argv[]) {
       highlight.reserve(text.n_items);
       int i = 0;
       while (i < text.n_items) {
-        if (i < text.n_items and isdigit(text[i]) and (i > 0 || !isalpha(text[i - 1])))
-          highlight[i++] = 1;
+        if (isdigit(text[i]) || text[i] == '.') {
+          if (isdigit(text[i]))
+            highlight[i++] = 1;
+          if (i < text.n_items) {
+//            0xF12323ULL
+//            0b11010111
+            if (tolower(text[i]) == 'x') {
+              highlight[i++] = 1;
+              while (i < text.n_items and (isdigit(text[i]) || strchr("abcdef", tolower(text[i]))))
+                highlight[i++] = 1;
+            } else if (tolower(text[i]) == 'b') {
+              highlight[i++] = 1;
+              while (i < text.n_items and strchr("01", text[i]))
+                highlight[i++] = 1;
+            } else if (isdigit(text[i])) {
+              while (i < text.n_items and isdigit(text[i]))
+                highlight[i++] = 1;
+              if (i < text.n_items) {
+                if (text[i] == '.') {
+                  highlight[i++] = 1;
+                  while (i < text.n_items and isdigit(text[i]))
+                    highlight[i++] = 1;
+                }
+              }
+            } else if (text[i] == '.') {
+              if (i + 1 < text.n_items and isdigit(text[i + 1])) {
+                highlight[i++] = 1;
+                while (i < text.n_items and isdigit(text[i]))
+                  highlight[i++] = 1;
+              }
+              else
+                highlight[i++] = 3;
+            }
+            if (i < text.n_items and tolower(text[i]) == 'u')
+              highlight[i++] = 1;
+            if (i < text.n_items and tolower(text[i]) == 'l')
+              highlight[i++] = 1;
+            if (i < text.n_items and tolower(text[i]) == 'l')
+              highlight[i++] = 1;
+            if (i < text.n_items and tolower(text[i]) == 'f')
+              highlight[i++] = 1;
+          }
+        }
         else if (isalpha(text[i]) || text[i] == '_') {
           int beg = i;
           string word{};
@@ -614,7 +610,7 @@ int main(int argc, char *argv[]) {
             while (beg < i)
               highlight[beg++] = 3;
           }
-        } else if (i < text.n_items and strchr("+-*/^%!()[]{}<>&=|", text[i]))
+        } else if (i < text.n_items and strchr("+-*/^%!$()[]{}<>&=|_#\'\"", text[i]))
           highlight[i++] = 2;
         else if (i < text.n_items)
           highlight[i++] = 3;
